@@ -7,6 +7,7 @@ Phone-side tools for recording and analyzing the WWV 10 MHz carrier via public K
 1. **iSH**: clone `jks-prv/kiwiclient`, tarball, serve over HTTP
 2. **Pythonista**: pull tarball, run `kiwirecorder.py` (USB at 9999 kHz → ~1 kHz tone)
 3. **Analysis**: `wwv_ui.py` — UI with Doppler / spectrogram / SNR views + solar context
+4. **Catalog + stack**: `run_stack.py` builds a metadata cache and terminator-aligned deep-field stacks
 
 ## First result
 
@@ -19,3 +20,6 @@ Phone-side tools for recording and analyzing the WWV 10 MHz carrier via public K
 ## Files
 
 - `wwv_ui.py` — interactive UI (edit `RX_LAT`/`RX_LON` for your site)
+- `wwv_catalog.py` — metadata cache (`.npz` per recording, `manifest.json`)
+- `wwv_stack.py` — terminator-aligned stacking
+- `run_stack.py` — driver: scan → align sunrise/sunset → PNG stacks
