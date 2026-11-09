@@ -45,14 +45,20 @@ def terminator_crossing(rec: Rec, threshold=90.0, sunrise=True):
 
 
 def align_on_terminator(recs, sunrise=True, threshold=90.0,
-                        min_good=0.3, win_min=(-30, +30)):
+                        min_good=0.3, win_min=(-30, +30),
+                        kinds=('carrier',)):
     """
     Returns list of (phase_minutes, df_detrended, zen_mid, dt_iso) for each
     successfully aligned recording. df is centered so 0 = quiet baseline.
+
+    Only recordings whose kind is in `kinds` are considered (default: carrier only).
+    Tick-and-tone / reference files are excluded so they cannot contaminate the stack.
     """
     lo, hi = win_min
     out = []
     for rec in recs:
+        if getattr(rec, 'kind', 'carrier') not in kinds:
+            continue
         t0 = terminator_crossing(rec, threshold, sunrise=sunrise)
         if t0 is None:
             continue
@@ -122,8 +128,9 @@ def catalog_digest(recs):
     if not recs:
         return 'catalog empty'
     n = len(recs)
+    n_carrier = sum(1 for r in recs if getattr(r, 'kind', 'carrier') == 'carrier')
     seasons = {s: sum(1 for r in recs if r.season == s)
                for s in ('equinox', 'solstice', 'other')}
-    return (f'{n} recs | dur {sum(r.dur_s for r in recs)/3600:.1f} h | '
+    return (f'{n} recs ({n_carrier} carrier) | dur {sum(r.dur_s for r in recs)/3600:.1f} h | '
             f'seasons {seasons} | '
             f'median good-frac {np.median([r.n_good/max(r.n_windows,1) for r in recs]):.2f}')
