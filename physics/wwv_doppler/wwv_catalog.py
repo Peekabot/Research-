@@ -24,16 +24,17 @@ class Rec:
     dt_utc:    str           # ISO
     dur_s:     float
     fs:        int
-    sub_lat:   float
-    sub_lon:   float
-    mid_lat:   float
-    mid_lon:   float
-    zen_mid:   float         # solar zenith at midpoint at start
-    season:    str           # 'equinox' | 'solstice' | 'other'
-    n_windows: int
-    n_good:    int
-    std_df:    float         # Hz, over good windows
-    median_snr: float
+    kind:      str = 'carrier'   # 'carrier' | 'wwv_tick' | 'reference' | 'other'
+    sub_lat:   float = 0.0
+    sub_lon:   float = 0.0
+    mid_lat:   float = 0.0
+    mid_lon:   float = 0.0
+    zen_mid:   float = 0.0         # solar zenith at midpoint at start
+    season:    str = 'other'      # 'equinox' | 'solstice' | 'other'
+    n_windows: int = 0
+    n_good:    int = 0
+    std_df:    float = float('nan')  # Hz, over good windows
+    median_snr: float = float('nan')
     t:         np.ndarray = field(repr=False, default=None)
     df:        np.ndarray = field(repr=False, default=None)
     snr:       np.ndarray = field(repr=False, default=None)
@@ -44,6 +45,31 @@ def _season(dt):
     lat, _ = subsolar(dt)
     if abs(lat) < 8:   return 'equinox'
     if abs(lat) > 20:  return 'solstice'
+    return 'other'
+
+
+def classify(x, fs):
+    """Rough classifier. carrier = continuous tone suitable for Doppler."""
+    N = min(len(x), int(5 * fs))
+    if N < 1024:
+        return 'other'
+    P = np.abs(np.fft.rfft(x[:N] * np.hanning(N)))**2
+    f = np.fft.rfftfreq(N, 1/fs)
+
+    def band_power(lo, hi):
+        m = (f >= lo) & (f <= hi)
+        return float(P[m].sum()) if m.any() else 0.0
+
+    total = P.sum() + 1e-12
+    p_500  = band_power(450,  550)
+    p_1000 = band_power(950, 1050)
+
+    # both tones present → classic WWV tick-and-tone
+    if p_500 / total > 0.05 and p_1000 / total > 0.2:
+        return 'wwv_tick'
+    if p_1000 / total > 0.4:
+        # mostly continuous 1000 Hz — treat as carrier unless filename says otherwise
+        return 'carrier'
     return 'other'
 
 
@@ -60,11 +86,13 @@ def _build(src):
     mid_lat, mid_lon = great_circle_mid(TX_LAT, TX_LON, RX_LAT, RX_LON)
     zen = solar_zenith(mid_lat, mid_lon, sub_lat, sub_lon)
     good = snr > 10
+    kind = classify(x, fs)
 
     rec = Rec(
         path=src, mtime=os.path.getmtime(src),
         dt_utc=dt.isoformat(),
         dur_s=len(x)/fs, fs=fs,
+        kind=kind,
         sub_lat=sub_lat, sub_lon=sub_lon,
         mid_lat=mid_lat, mid_lon=mid_lon,
         zen_mid=zen, season=_season(dt),
@@ -90,6 +118,7 @@ def _load_cached(src):
     rec = Rec(
         path=str(z['path']), mtime=float(z['mtime']),
         dt_utc=str(z['dt_utc']), dur_s=float(z['dur_s']), fs=int(z['fs']),
+        kind=str(z['kind']) if 'kind' in z else 'carrier',
         sub_lat=float(z['sub_lat']), sub_lon=float(z['sub_lon']),
         mid_lat=float(z['mid_lat']), mid_lon=float(z['mid_lon']),
         zen_mid=float(z['zen_mid']), season=str(z['season']),
